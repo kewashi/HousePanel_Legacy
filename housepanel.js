@@ -2333,6 +2333,52 @@ function setupTabclick() {
 
 function clockUpdater(tz) {
 
+    // update the date every hour
+    setInterval(function() {
+        var old = new Date();
+        var utc = old.getTime() + (old.getTimezoneOffset() * 60000);
+        var d = new Date(utc + (1000*tz));        
+
+        var weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        var months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        var dofw = d.getDay();
+        var mofy = d.getMonth();
+        var weekday = weekdays[dofw];
+        var month = months[mofy];
+        var day = d.getDate().toString();
+        if ( day < 10 ) {
+            day = "0" + day.toString();
+        } else {
+            day = day.toString();
+        }
+        var year = d.getFullYear().toString();
+        
+        // set the weekday
+        $("div.panel div.clock.weekday").each(function() {
+            $(this).html(weekday);
+        });
+
+        // set the date
+        $("div.panel div.clock.date").each(function() {
+            if ( $(this).parent().siblings("div.overlay.fmt_date").length > 0 ) {
+                var timestr = $(this).parent().siblings("div.overlay.fmt_date").children("div.fmt_date").html();
+                timestr = timestr.replace("M",month);
+                timestr = timestr.replace("d",day);
+                timestr = timestr.replace("Y",year);
+                $(this).html(timestr);
+            } else if ( $(this).siblings("div.user_hidden").length > 0 ) {
+                var linkval = $(this).siblings("div.user_hidden").attr("linkval");
+                if ( linkval && $("div.clock.date.p_"+linkval) ) {
+                    var timestr = $("div.clock.date.p_"+linkval).html();
+                    $(this).html(timestr);
+                }
+            } else {
+                var defstr = month + " " + day + ", " + year;
+                $(this).html(defstr);
+            }
+        });
+    }, 3600000 );
+
     setInterval(function() {
         var old = new Date();
         var utc = old.getTime() + (old.getTimezoneOffset() * 60000);
@@ -2914,7 +2960,7 @@ function processClick(that, thingname) {
         // create a visual cue that we clicked on this item
         $(targetid).addClass("clicked");
         setTimeout( function(){ $(targetid).removeClass("clicked"); }, 750 );
-
+        
         // pass the call to main routine in php
         $.post(cm_Globals.returnURL, 
                {useajax: ajaxcall, id: bid, type: thetype, value: thevalue, 
@@ -2990,7 +3036,7 @@ function processClick(that, thingname) {
                                         if ( linkvalue["name"] ) { delete linkvalue["name"]; }
                                         if ( linkvalue["password"] ) { delete linkvalue["password"]; }
                                         updateTile(aid, linkvalue);
-                                        updAll(realsubid, linkaid, linkbid, linktype, linkhub, linkvalue);
+                                        // updAll(realsubid, linkaid, linkbid, linktype, linkhub, linkvalue);
                                     }
                                 }
                                 // we remove name and password fields since they don't need updating for security reasons
@@ -3007,8 +3053,8 @@ function processClick(that, thingname) {
                                         presult["trackImage"] = audiodata["albumArtUrl"];
                                         presult["mediaSource"] = audiodata["mediaSource"];
                                     }
-                        
-                                    updAll(subid,aid,bid,thetype,hubnum,presult);
+                                    updateTile(aid, presult);
+                                    // updAll(subid,aid,bid,thetype,hubnum,presult);
                                 }
 
                             } else {

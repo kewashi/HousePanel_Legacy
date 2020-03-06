@@ -17,6 +17,7 @@
  * it displays and enables interaction with switches, dimmers, locks, etc
  * 
  * Revision history:
+ * 02/02/2020 - added secondary hub push and include hub id in the push
  * 01/10/2020 - add mode chenge hub push and clean up code
  * 12/20/2019 - bug fixes and cleanup
  * 12/19/2019 - update to include new Sonos audioNotification capability
@@ -107,6 +108,11 @@ preferences {
         paragraph "Specify these parameters to enable direct and instant hub pushes when things change in your home."
         input "webSocketHost", "text", title: "Host IP", defaultValue: "192.168.11.20", required: false
         input "webSocketPort", "text", title: "Port", defaultValue: "19234", required: false
+        paragraph "The Alt IP and Port values are used to send hub pushes to two distinct installations of HousePanel. " +
+                  "If left blank a secondary hub push will not occur. Only use this if you are hosting two versions of HP " +
+                  "that both need to stay in sync with your smart home hubs."
+        input "webSocketHost2", "text", title: "Alt Host IP", defaultValue: "192.168.11.186", required: false
+        input "webSocketPort2", "text", title: "Alt Port", defaultValue: "3080", required: false
     }
     section("Lights and Switches") {
         input "myswitches", "capability.switch", multiple: true, required: false, title: "Switches"
@@ -197,6 +203,8 @@ def initialize() {
     state.usepistons = settings?.usepistons ?: false
     state.directIP = settings?.webSocketHost ?: ""
     state.directPort = settings?.webSocketPort ?: "19234"
+    state.directIP2 = settings?.webSocketHost2 ?: ""
+    state.directPort2 = settings?.webSocketPort2 ?: "3080"
     state.tz = settings?.timezone ?: "America/Detroit"
     state.prefix = settings?.hubprefix ?: getPrefix()
     state.dateFormat = settings?.dateformat ?: "M/dd h:mm"
@@ -210,7 +218,10 @@ def initialize() {
     
     if (state.directIP)
     {
-        postHub("initialize", "", "", "", "")
+        postHub(state.directIP, state.directPort, "initialize", "", "", "", "")
+        if ( state.directIP2 ) {
+            postHub(state.directIP2, state.directPort2, "initialize", "", "", "", "")
+        }
         registerLocations()
         runIn(200, "registerAll")
     }
@@ -268,7 +279,9 @@ def configureHub() {
     logger("Hub ID = ${state.hubid}", "info")
     logger("Hub Firmware = ${firmware}", "info")
     logger("rPI IP Address = ${state.directIP}", "info")
-    logger("webSocket Port = ${state.directPort}", "info")
+    logger("rPI webSocket Port = ${state.directPort}", "info")
+    logger("Alt IP Address = ${state.directIP2}", "info")
+    logger("Alt webSocket Port = ${state.directPort2}", "info")
     logger("date Timezone for events = ${state.tz}", "info")
     logger("date Format for events = ${state.dateFormat}", "info")
 }
@@ -2340,8 +2353,8 @@ def changeHandler(evt) {
 //        attr = "alarmSystemStatus"
 //    }
     
-    logger("Sending ${src} Event ( ${deviceName}, ${deviceid}, ${attr}, ${value} ) to Websocket at (${state.directIP}:${state.directPort})", "info")
     if (state.directIP && state.directPort && deviceName && deviceid && attr && value) {
+        logger("Sending ${src} Event ( ${deviceName}, ${deviceid}, ${attr}, ${value} ) to HousePanel clients", "info")
 
         // fix bulbs
         if ( (mybulbs?.find {it.id == deviceid}) && (attr=="hue" || attr=="saturation" || attr=="level" || attr=="color") ) {
@@ -2357,42 +2370,50 @@ def changeHandler(evt) {
             }
             
         }
-        postHub("update", deviceName, deviceid, attr, value)
+        postHub(state.directIP, state.directPort, "update", deviceName, deviceid, attr, value)
+        if (state.directIP2) {
+            postHub(state.directIP2, state.directPort2, "update", deviceName, deviceid, attr, value)
+        }
     }
 }
 
 def modeChangeHandler(evt) {
     
     // send group of hub actions for mode changes
-    def result
     def themode = evt.value
-    logger("Sending new mode= ${themode} to Websocket at (${state.directIP}:${state.directPort})", "info")
-    def vals = ["m1x1","m1x2","m2x1","m2x2"]
-    vals.each {
-        def modeid = "${state.prefix}${it}"
-        def modename = "Mode ${it}"
-        postHub("update", modename, modeid, "themode", themode)
+    if (themode && state.directIP && state.directPort) {
+        logger("Sending new mode= ${themode} to HousePanel clients", "info")
+        def vals = ["m1x1","m1x2","m2x1","m2x2"]
+        vals.each {
+            def modeid = "${state.prefix}${it}"
+            def modename = "Mode ${it}"
+            postHub(state.directIP, state.directPort, "update", modename, modeid, "themode", themode)
+            if (state.directIP2) {
+                postHub(state.directIP2, state.directPort2, "update", modename, modeid, "themode", themode)
+            }
+        }
     }
 }
 
-def postHub(msgtype, name, id, attr, value) {
+def postHub(ip, port, msgtype, name, id, attr, value) {
 
-    logger("postHub to IP= ${state.directIP} port= ${state.directPort} msgtype= ${msgtype} name= ${name} id= ${id} attr= ${attr} value= ${value}", "info" )
+    logger("postHub to IP= ${ip} port= ${port} msgtype= ${msgtype} name= ${name} id= ${id} attr= ${attr} value= ${value}", "info" )
     
-    if ( msgtype && state?.directIP && state?.directPort ) {
+    if ( msgtype && ip && port ) {
         // Send Using the Direct Mechanism
-        logger("Sending ${msgtype} to Websocket at ${state.directIP}:${state.directPort}", "info")
+        logger("Sending ${msgtype} to Websocket at ${ip}:${port}", "info")
 
         // set a hub action - include the access token so we know which hub this is
         def params = [
             method: "POST",
             path: "/",
             headers: [
-                HOST: "${state.directIP}:${state.directPort}",
+                HOST: "${ip}:${port}",
                 'Content-Type': 'application/json'
             ],
             body: [
                 msgtype: msgtype,
+                hubid: state.hubid,
                 change_name: name,
                 change_device: id,
                 change_attribute: attr,

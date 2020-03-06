@@ -9,6 +9,7 @@
  * Revision History
  */
 $devhistory = "
+ 2.120      Fix clock update bug to include weekday and date; add dual websocket
  2.119      Minor bug fixes
  2.118      Fix bug that prevented user from changing custom tile count
  2.117      Load jquery locally and include files in the distro
